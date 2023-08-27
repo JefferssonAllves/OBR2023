@@ -15,11 +15,13 @@ Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 #define LOX2_ADDRESS 0x31
 #define LOX3_ADDRESS 0x32
 #define LOX4_ADDRESS 0x33
+
 // set the pins to shutdown
 #define SHT_LOX1 26
 #define SHT_LOX2 40
 #define SHT_LOX3 28
 #define SHT_LOX4 43
+const byte pinosLox[4] = { SHT_LOX1, SHT_LOX2, SHT_LOX3, SHT_LOX4 };
 
 
 // objects for the vl53l0x
@@ -27,20 +29,20 @@ Adafruit_VL53L0X sensorLaserFrente = Adafruit_VL53L0X();
 Adafruit_VL53L0X sensorLaserDireita = Adafruit_VL53L0X();
 Adafruit_VL53L0X sensorLaserRampa = Adafruit_VL53L0X();
 Adafruit_VL53L0X sensorLaserEsquerda = Adafruit_VL53L0X();
-
+const Adafruit_VL53L0X listaSensoresLaser[4] = { sensorLaserFrente, sensorLaserDireita, sensorLaserRampa, sensorLaserEsquerda };
 
 //Inicializar sensor sharp da frente
 #define sensorSharpFrente A14
 #define sensorSharpDireita A15
 #define sensorSharpEsquerda A13
+#define sensorSharpGarra A9
 
 //Ligar leds vermelhos da placa seguidor de linha
 #define ledVermelho1 53
 #define ledVermelho2 50
 #define ledVerde1 49
 #define ledVerde2 51
-//Definir pino do sensor de inclinação
-#define sensorRampa 30
+
 //Definir pino para receber o PULLUP da garra
 #define identificadorBolinhas 25
 //Botao de calibrar para os sensores de linha
@@ -48,10 +50,13 @@ Adafruit_VL53L0X sensorLaserEsquerda = Adafruit_VL53L0X();
 
 //Inicializar os motores principais
 ControleMotores motores;
+
+//Quantidade de sensores usados para seguir linha
 #define quantidadeSensores 7
-//Instancia sensores de linha usando a biblioteca 'ControleSensores':
 const byte PORTAS_ANALOGICOS[quantidadeSensores] = { A0, A1, A2, A3, A4, A6, A5 };
+//Instancia sensores de linha usando a biblioteca 'ControleSensores':
 ControleSensores sensores(PORTAS_ANALOGICOS, quantidadeSensores, botaoCalibrar);
+
 //Instancias dos sensores veml6040;
 VEML6040 sensorRGB;
 short corteMinVml[2] = { 2000, 3000 }, corteMaxVml[2] = { 3000, 4500 };
@@ -72,6 +77,10 @@ void setup() {
   pinMode(sensorSharpFrente, INPUT);
   pinMode(sensorSharpDireita, INPUT);
   pinMode(sensorSharpEsquerda, INPUT);
+  pinMode(sensorSharpGarra, INPUT);
+
+  //Definir pino para identificar se a bolinha é viva ou morta
+  pinMode(identificadorBolinhas, INPUT_PULLUP);
 
   //Definir pinos dos leds
   pinMode(ledVermelho1, OUTPUT);
@@ -87,19 +96,13 @@ void setup() {
   selecionarDispositivo(1);
   sensorRGB.setConfiguration(VEML6040_IT_40MS + VEML6040_AF_AUTO + VEML6040_SD_ENABLE);
 
-  //Definir pinos para identificar as bolinhas
-  pinMode(identificadorBolinhas, INPUT_PULLUP);
-  //Definir servos da garra
-
-  selecionarDispositivo(7);
-  scrollText("OBR-2208", 270);
-  lcd.clear();
+  // selecionarDispositivo(7);
+  // scrollText("OBR-2208", 270);
+  // lcd.clear();
 
   iniciarSensorLaser();
   garraInicial();
 
-
-  pinMode(identificadorBolinhas, INPUT_PULLUP);
   selecionarDispositivo(7);
   lcd.print("Calibrando...");
   Serial.print("Programa Iniciado!!!");
@@ -110,14 +113,7 @@ void setup() {
   lcd.print("Calibrado!!!");
   delay(500);
   lcd.clear();
-  motores.frente();
 }
-// void calibrarI2c(){
-//   short menoresValores[2] = {999, 999}, maioresValores[2] = {0,0};
-//   for(byte i=0: i<2;i++){
-
-//   }
-// }
 void scrollText(String texto, int delayTime) {
   for (byte i = 0; i < 16; i++) {
     selecionarDispositivo(7);
@@ -126,111 +122,6 @@ void scrollText(String texto, int delayTime) {
     lcd.print(texto);  // Exibe os próximos 16 caracteres
     delay(delayTime);
   }
-}
-void setID() {
-  // all reset
-  digitalWrite(SHT_LOX1, LOW);
-  digitalWrite(SHT_LOX2, LOW);
-  digitalWrite(SHT_LOX3, LOW);
-  digitalWrite(SHT_LOX4, LOW);
-  delay(10);
-  // all unreset
-  digitalWrite(SHT_LOX1, HIGH);
-  digitalWrite(SHT_LOX2, HIGH);
-  digitalWrite(SHT_LOX3, HIGH);
-  digitalWrite(SHT_LOX3, HIGH);
-  delay(10);
-
-  // activating LOX1 and resetting LOX2
-  digitalWrite(SHT_LOX1, HIGH);
-  digitalWrite(SHT_LOX2, LOW);
-  digitalWrite(SHT_LOX3, LOW);
-  digitalWrite(SHT_LOX3, LOW);
-
-  // initing LOX1
-  if (!sensorLaserFrente.begin(LOX1_ADDRESS)) {
-    Serial.println(F("Failed to boot first VL53L0X"));
-    while (1)
-      ;
-  }
-  delay(10);
-
-  // activating LOX2
-  digitalWrite(SHT_LOX2, HIGH);
-  delay(10);
-
-  //initing LOX2
-  if (!sensorLaserDireita.begin(LOX2_ADDRESS)) {
-    Serial.println(F("Failed to boot second VL53L0X"));
-    while (1)
-      ;
-  }
-
-  digitalWrite(SHT_LOX3, HIGH);
-  delay(10);
-
-  //initing LOX2
-  if (!sensorLaserRampa.begin(LOX3_ADDRESS)) {
-    Serial.println(F("Failed to boot third VL53L0X"));
-    while (1)
-      ;
-  }
-  
-  digitalWrite(SHT_LOX4, HIGH);
-  delay(10);
-
-  //initing LOX2
-  if (!sensorLaserEsquerda.begin(LOX4_ADDRESS)) {
-    Serial.println(F("Failed to boot four VL53L0X"));
-    while (1)
-      ;
-  }
-}
-
-void beginServos() {
-
-#define Frequencia 50  // VALOR DA FREQUENCIA DO SERVO
-
-  pwm.begin();                 // INICIA O OBJETO PWM
-  pwm.setPWMFreq(Frequencia);  // DEFINE A FREQUENCIA DE TRABALHO DO SERVO
-}
-void writeServos(int nServo, int posicao) {
-#define SERVOMIN 100  // VALOR PARA UM PULSO MAIOR QUE 1 mS
-#define SERVOMAX 300  // VALOR PARA UM PULSO MENOR QUE 2 mS
-
-  if (nServo == 2) {
-#define SERVOMAX 83 // VALOR PARA UM PULSO MENOR QUE 2 mS
-  }
-
-  short pos = map(posicao, 0, 180, SERVOMIN, SERVOMAX);
-  pwm.setPWM(nServo, 0, pos);
-}
-
-short leituraSensorLaser(Adafruit_VL53L0X sensorLaser) {
-  VL53L0X_RangingMeasurementData_t measure;
-  sensorLaser.rangingTest(&measure, false);
-  if (measure.RangeStatus != 4) {  // if not out of range
-    return (measure.RangeMilliMeter);
-  }
-}
-void iniciarSensorLaser() {
-
-  pinMode(SHT_LOX1, OUTPUT);
-  pinMode(SHT_LOX2, OUTPUT);
-  pinMode(SHT_LOX3, OUTPUT);
-  pinMode(SHT_LOX4, OUTPUT);
-
-  Serial.println(F("Shutdown pins inited..."));
-
-  digitalWrite(SHT_LOX1, LOW);
-  digitalWrite(SHT_LOX2, LOW);
-  digitalWrite(SHT_LOX3, LOW);
-  digitalWrite(SHT_LOX4, LOW);
-  Serial.println(F("Both in reset mode...(pins are low)"));
-
-
-  Serial.println(F("Starting..."));
-  setID();
 }
 void ledVerde() {
   digitalWrite(ledVermelho1, 0);
@@ -244,14 +135,139 @@ void ledVermelho() {
   digitalWrite(ledVerde1, 0);
   digitalWrite(ledVerde2, 0);
 }
+void setID() {
+  // all reset
+  for (byte i : pinosLox) {
+    digitalWrite(i, LOW);
+  }
+  delay(10);
+  // all unreset
+  for (byte i : pinosLox) {
+    digitalWrite(i, HIGH);
+  }
+  delay(10);
+
+  // activating LOX1 and resetting LOX2
+  digitalWrite(SHT_LOX1, HIGH);
+  digitalWrite(SHT_LOX2, LOW);
+  digitalWrite(SHT_LOX3, LOW);
+  digitalWrite(SHT_LOX3, LOW);
+
+  for (byte i = 0; i < 4; i++) {
+    if (!listaSensoresLaser[i].begin(pinosLox[i])) {
+      Serial.println("Failed to boot " + (String)(i + 1) + " VL53L0X");
+      while (1)
+        ;
+    }
+    delay(10);
+    if (i == 3) { break; }
+    digitalWrite((pinosLox[i + 1]), HIGH);
+    delay(10);
+  }
+}
+void iniciarSensorLaser() {
+  for (byte i : pinosLox) {
+    pinMode(i, OUTPUT);
+  }
+
+  Serial.println(F("Shutdown pins inited..."));
+  for (byte i : pinosLox) {
+    digitalWrite(i, LOW);
+  }
+
+  Serial.println(F("Both in reset mode...(pins are low)"));
+
+
+  Serial.println(F("Starting..."));
+  setID();
+}
+void beginServos() {
+
+#define Frequencia 50  // VALOR DA FREQUENCIA DO SERVO
+
+  pwm.begin();                 // INICIA O OBJETO PWM
+  pwm.setPWMFreq(Frequencia);  // DEFINE A FREQUENCIA DE TRABALHO DO SERVO
+}
+void writeServos(int nServo, int posicao) {
+#define SERVOMIN 120
+#define SERVOMAX 300
+  if (nServo == 14) {
+#define SERVOMIN 83  // VALOR PARA UM PULSO MENOR QUE 2 mS
+#define SERVOMAX 400
+  }
+
+  short pos = map(posicao, 0, 180, SERVOMIN, SERVOMAX);
+  pwm.setPWM(nServo, 0, pos);
+}
+void garraAberta() {
+  writeServos(0, 115);
+  writeServos(1, 20);
+}
+void garraFechada(bool cubo = false) {
+  if (cubo) {
+    writeServos(0, 40);
+    writeServos(1, 80);
+    delay(1000);
+  } else {
+    short posicaoGarraDireita = 20;
+    for (byte i = 115; i < 115; i += 15) {
+      writeServos(0, i);
+      if (posicaoGarraDireita != 80) {
+        writeServos(1, posicaoGarraDireita += 15);
+      }
+      delay(100);
+    }
+  }
+}
+void garraBaixa() {
+  writeServos(14, 180);
+  delay(1000);
+}
+void garraAlta() {
+  writeServos(14, 0);
+  delay(1000);
+}
+void garraInicial(bool resgate = false) {
+  garraAberta();
+  if (resgate) {
+    garraBaixa();
+  } else {
+    garraAlta();
+  }
+}
+void pegarObjeto(bool cubo = false) {
+  garraAberta();
+  garraBaixa();
+  motores.frente();
+  motores.acionar(150, 150, 120);
+  motores.parado();
+  garraFechada(cubo);
+  garraAlta();
+  motores.tras();
+  motores.acionar(150, 150, 120);
+  motores.parado();
+}
+void pegarCubo() {
+  pegarObjeto(true);
+}
+void pegarBolinha() {
+  pegarObjeto();
+  if (!digitalRead(identificadorBolinhas)) {
+    writeServos(0, 115);
+    writeServos(1, 100);
+    delay(1000);
+  } else {
+    writeServos(0, 30);
+    writeServos(1, 20);
+    delay(1000);
+  }
+  garraAberta();
+  garraBaixa();
+}
 void selecionarDispositivo(uint8_t id) {
   Wire.beginTransmission(0x70);  // A0= LOW; A1= LOW; A2= LOW
   Wire.write(1 << id);
   Wire.endTransmission();
-}
-short getGreen(uint8_t portaI2c) {
-  selecionarDispositivo(portaI2c);
-  return sensorRGB.getGreen();
 }
 void debugVeml6040() {
   ledVerde();
@@ -273,74 +289,31 @@ void debugSensoresLinha() {
   Serial.println();
 }
 void debugSensoresLaser() {
-  Serial.print((String) leituraSensorLaser(sensorLaserFrente) + "\t");Serial.print((String) leituraSensorLaser(sensorLaserRampa) + "\t");Serial.print((String) leituraSensorLaser(sensorLaserEsquerda) + "\t");Serial.println(leituraSensorLaser(sensorLaserDireita));
+  Serial.print((String)leituraSensorLaser(sensorLaserFrente) + "\t");
+  Serial.print((String)leituraSensorLaser(sensorLaserRampa) + "\t");
+  Serial.print((String)leituraSensorLaser(sensorLaserEsquerda) + "\t");
+  Serial.println(leituraSensorLaser(sensorLaserDireita));
 }
 void debugSensoresSharp() {
   Serial.print((String)leituraSharp(sensorSharpEsquerda) + "\t");
   Serial.print((String)leituraSharp(sensorSharpDireita) + "\t");
-  Serial.println((String)leituraSharp(sensorSharpFrente));
+  Serial.print((String)leituraSharp(sensorSharpFrente) + "\t");
+  Serial.println((String)leituraSharp(sensorSharpGarra));
 }
-bool testeVerde(uint8_t portaI2c) {
-  if (portaI2c == 0) {
-    return getGreen(portaI2c) >= corteMinVml[0] && getGreen(portaI2c) <= corteMaxVml[0];
-  }
-  return getGreen(portaI2c) >= corteMinVml[1] && getGreen(portaI2c) <= corteMaxVml[1];
+short getGreen(uint8_t portaI2c) {
+  selecionarDispositivo(portaI2c);
+  return sensorRGB.getGreen();
 }
-
-void fazerCurva(void (ControleMotores::*direcaoCurva)(), bool verde, byte indiceSensorLado, byte indiceSensorCurva) {
-  motores.frente();
-  motores.acionar(255, 255, 200);
-  if (verde) {
-    motores.acionar(255, 255, 160);
+short leituraSensorLaser(Adafruit_VL53L0X sensorLaser) {
+  VL53L0X_RangingMeasurementData_t measure;
+  sensorLaser.rangingTest(&measure, false);
+  if (measure.RangeStatus != 4) {  // if not out of range
+    return (measure.RangeMilliMeter);
   }
-
-  //Vai virar de acordo com a função passada como parametro
-  (motores.*direcaoCurva)();
-  //Vai virar para esquerda/direita enquanto o sensor do meio for menor que 600
-  if (verde) {
-    motores.acionar(255, 255, 650);
-  }
-  //Vai virar pra esquerda/direita enquanto o sensor do meio for maior que 350
-  motores.acionarEnquantoBranco(sensores, indiceSensorCurva, 700);
-
-  //motores.acionarEnquantoBranco(sensores, indiceSensorLado, 750);
-  //Andar pra frente enquanto os sensores = {0 1 0 0 0 1 0} for menor que 600
-  motores.frente();
-  motores.acionar(255, 255, 85);
-
-  lcd.clear();
+  return 8000;
 }
-
 float leituraSharp(byte portaSensor) {
   return 13 * pow(analogRead(portaSensor) * 0.0048828125, -1);
-}
-void desviarObstaculo() {
-  byte target = 15;
-  short erro = 0;
-  float P = 3.5;
-  short velocidadeAtual = 150;
-  motores.tras();
-  motores.acionar(255, 255, 1);
-  while (leituraSharp(sensorSharpFrente) <= 11)
-    ;
-  motores.esquerda();
-  motores.acionar(255, 255, 800);
-  int tempoInicial = millis();
-  while (true) {
-    if (millis() - tempoInicial >= 5000) {
-      if (sensores.leitura(0) <= 500) {
-        break;
-      }
-    }
-    erro = (leituraSharp(sensorSharpDireita) - target) * P;
-    motores.acionar(velocidadeAtual + erro, velocidadeAtual - erro);
-  }
-  motores.frente();
-  motores.acionar(255, 255, 350);
-  motores.esquerda();
-  motores.acionarEnquantoBranco(sensores, 2, 500);
-  motores.tras();
-  motores.acionar(255, 255, 200);
 }
 void seguirLinha(bool testeVerdes = true) {
   motores.acionar(240, 240, 40);
@@ -388,91 +361,255 @@ void seguirLinha(bool testeVerdes = true) {
   lcd.clear();
   motores.frente();
 }
-void garraInicial() {
-  writeServos(0, 180);
-  writeServos(1, 0);
-  delay(1000);
-  writeServos(2, 180);
-  delay(1000);
+bool testeVerde(uint8_t portaI2c) {
+  if (portaI2c == 0) {
+    return getGreen(portaI2c) >= corteMinVml[0] && getGreen(portaI2c) <= corteMaxVml[0];
+  }
+  return getGreen(portaI2c) >= corteMinVml[1] && getGreen(portaI2c) <= corteMaxVml[1];
 }
-void pegarObjeto(bool cubo = false) {
-  motores.tras();
-  motores.acionar(255, 255, 150);
-  motores.parado();
-  writeServos(2, 0);
-  delay(1000);
+void fazerCurva(void (ControleMotores::*direcaoCurva)(), bool verde, byte indiceSensorLado, byte indiceSensorCurva) {
   motores.frente();
-  motores.acionar(255, 255, 60);
-  motores.parado();
-  writeServos(0, 55);
-  writeServos(1, 125);
-  if (cubo) {
-    writeServos(0, 40);
-    writeServos(1, 140);
+  motores.acionar(255, 255, 200);
+  if (verde) {
+    motores.acionar(255, 255, 160);
   }
-  delay(1000);
-}
-void pegarCubo() {
-  pegarObjeto(true);
-  writeServos(2, 180);
-  delay(10000);
-  writeServos(0, 180);
-  writeServos(1, 180);
-  delay(1000);
-  garraInicial();
-}
-void pegarBolinha() {
-  pegarObjeto(false);
-  if (!digitalRead(identificadorBolinhas)) {
-    Serial.println("Bolinha Viva");
-  } else {
-    Serial.println("Bolinha Morta");
+
+  //Vai virar de acordo com a função passada como parametro
+  (motores.*direcaoCurva)();
+  //Vai virar para esquerda/direita enquanto o sensor do meio for menor que 600
+  if (verde) {
+    motores.acionar(255, 255, 650);
   }
-  garraInicial();
+  //Vai virar pra esquerda/direita enquanto o sensor do meio for maior que 350
+  motores.acionarEnquantoBranco(sensores, indiceSensorCurva, 700);
+
+  //motores.acionarEnquantoBranco(sensores, indiceSensorLado, 750);
+  //Andar pra frente enquanto os sensores = {0 1 0 0 0 1 0} for menor que 600
+  motores.frente();
+  motores.acionar(255, 255, 85);
+
+  lcd.clear();
+}
+void desviarObstaculo() {
+  byte target = 15;
+  short erro = 0;
+  float P = 3.5;
+  short velocidadeAtual = 150;
+  motores.tras();
+  motores.acionar(255, 255, 1);
+  while (leituraSharp(sensorSharpFrente) <= 11)
+    ;
+  motores.esquerda();
+  motores.acionar(255, 255, 800);
+  int tempoInicial = millis();
+  while (true) {
+    if (millis() - tempoInicial >= 5000) {
+      if (sensores.leitura(0) <= 500) {
+        break;
+      }
+    }
+    erro = (leituraSharp(sensorSharpDireita) - target) * P;
+    motores.acionar(velocidadeAtual + erro, velocidadeAtual - erro);
+  }
+  motores.frente();
+  motores.acionar(255, 255, 350);
+  motores.esquerda();
+  motores.acionarEnquantoBranco(sensores, 2, 500);
+  motores.tras();
+  motores.acionar(255, 255, 200);
 }
 void resgate() {
-  byte target = 90;
-  short erro = 0, P = 3;
-  short velocidadeAtual = 180;
-  Adafruit_VL53L0X sensorLaserPID = sensorLaserDireita;
-  byte sensorSharpArenas = sensorSharpDireita;
-  void (ControleMotores::*direcaoCurva)() = &ControleMotores::esquerda;
+  garraInicial(true);
+  byte target = 130;
+  float P = -5.5;
+  short erro = 0, velocidadeAtual = 180, curvas = 0, posicoesArenas[3] = { 0, 0, 0 };
+  Adafruit_VL53L0X sensorLaserPID = sensorLaserEsquerda, sensorLaserBolinhas = sensorLaserDireita;
+  byte sensorSharpArenas = sensorSharpEsquerda;
+  void (ControleMotores::*direcaoCurva)() = &ControleMotores::direita, (ControleMotores::*curvaOposta)() = &ControleMotores::esquerda;
   if (leituraSharp(sensorSharpEsquerda) < leituraSharp(sensorSharpDireita)) {
     P *= -1;
-    sensorLaserPID = sensorLaserEsquerda;
-    sensorSharpArenas = sensorSharpEsquerda;
-    direcaoCurva = &ControleMotores::direita;
+    sensorLaserPID = sensorLaserDireita;
+    sensorLaserBolinhas = sensorLaserEsquerda;
+    sensorSharpArenas = sensorSharpDireita;
+    direcaoCurva = &ControleMotores::esquerda;
+    curvaOposta = &ControleMotores::direita;
   }
+  // motores.frente();
+  // motores.acionar(255,255,800);
+  // motores.esquerda();
+  // motores.acionar(255,255,800);
+  motores.frente();
+  motores.acionar(255, 255, 1);
+  Serial.println("ENTRANDO NO RESGATE");
+  while (leituraSensorLaser(sensorLaserPID) >= target);
+  motores.acionar(255, 255, 600);
   while (true) {
-    for (byte i = 0; i < 4; i++) {
-      while (leituraSharp(sensorSharpFrente) >= 7) {
-        erro = (leituraSensorLaser(sensorLaserPID) - target) * P;
-        motores.acionar(velocidadeAtual + erro, velocidadeAtual - erro);
-        // if (leituraSensorLaser(indiceSensorLaser) <= 180) {
-        //   pegarBolinhasLaterais(direcaoCurva);
-        // }
-        Serial.print((String) (velocidadeAtual - erro) + "\t");Serial.println((String) leituraSensorLaser(sensorLaserPID) + "\t");
+    long tempo = millis();
+    while (leituraSharp(sensorSharpFrente) >= 8.50) {
+      if (leituraSharp(sensorSharpArenas) >= 16.5) {
+        long tempoSeguirParedes = millis();
+        while (millis() - tempoSeguirParedes <= 1500) {
+          erro = (leituraSensorLaser(sensorLaserPID) - target) * P;
+          motores.acionar(velocidadeAtual + erro, velocidadeAtual - erro);
+        }
+        pegarBolinha();
+        (motores.*direcaoCurva)();
+        motores.acionar(255, 255, 1200);
+        pegarBolinha();
+        motores.tras();
+        motores.acionar(255, 255, 600);
+        //entregarBolinhas
+        for (byte i = 0; i <= 2; i++) {
+          motores.frente();
+          delay(200);
+          motores.tras();
+          delay(200);
+        }
+        motores.frente();
+        motores.acionar(255, 255, 600);
+        (motores.*curvaOposta)();
+        motores.acionar(255, 255, 1100);
+        tempoSeguirParedes = millis();
+        while (millis() - tempoSeguirParedes <= 4000) {
+          erro = (leituraSensorLaser(sensorLaserPID) - target) * P;
+          motores.acionar(velocidadeAtual + erro, velocidadeAtual - erro);
+        }
+        tempoSeguirParedes = 0;
+        curvas++;
+        switch (curvas) {
+          case 1:
+            posicoesArenas[0] = 1;
+            break;
+          case 2:
+            posicoesArenas[1] = 1;
+            break;
+          case 3:
+            posicoesArenas[2] = 1;
+            break;
+        }
       }
-      (motores.*direcaoCurva)();
-      motores.acionar(255, 255, 1050);
+      if(leituraSensorLaser(sensorLaserBolinhas) <= 150){
+        pegarBolinhasLaterais(direcaoCurva);
+      }
+      if (curvas == 3) {
+        long tempoSeguirParedes = millis();
+        while (millis() - tempoSeguirParedes <= 1800) {
+          erro = (leituraSensorLaser(sensorLaserPID) - target) * P;
+          motores.acionar(velocidadeAtual + erro, velocidadeAtual - erro);
+        }
+        pegarBolinha();
+        writeServos(14, 170);
+        garraAberta();
+        (motores.*direcaoCurva)();
+        motores.acionar(255, 255, 1300);
+        motores.frente();
+        motores.acionar(255, 255, 3000);
+        if (posicoesArenas[0] == 1) {
+          motores.esquerda();
+          motores.acionar(255, 255, 850);
+          motores.frente();
+          while (leituraSharp(sensorSharpGarra) >= 5)
+            ;
+          pegarBolinha();
+          writeServos(14, 170);
+          garraAberta();
+          motores.direita();
+          motores.acionar(255, 255, 2500);
+          motores.tras();
+          motores.acionar(255, 255, 600);
+          //entregarBolinhas
+          for (byte i = 0; i <= 2; i++) {
+            motores.frente();
+            delay(200);
+            motores.tras();
+            delay(200);
+          }
+          if (posicoesArenas[1] == 1) {
+            motores.esquerda();
+            motores.acionar(255, 255, 600);
+            motores.frente();
+            while (leituraSharp(sensorSharpGarra) >= 5)
+              ;
+            pegarBolinha();
+            writeServos(14, 170);
+            garraAberta();
+            motores.direita();
+            motores.acionar(255, 255, 2500);
+            motores.tras();
+            motores.acionar(255, 255, 600);
+            //entregarBolinhas
+            for (byte i = 0; i <= 2; i++) {
+              motores.frente();
+              delay(200);
+              motores.tras();
+              delay(200);
+            }
+          } else {
+            motores.frente();
+            while (leituraSharp(sensorSharpGarra) >= 5)
+              ;
+            pegarBolinha();
+            writeServos(14, 170);
+            garraAberta();
+            motores.direita();
+            motores.acionar(255, 255, 2500);
+            motores.tras();
+            motores.acionar(255, 255, 700);
+            //entregarBolinhas
+            for (byte i = 0; i <= 2; i++) {
+              motores.frente();
+              delay(200);
+              motores.tras();
+              delay(200);
+            }
+          }
+        } else if (posicoesArenas[1] == 1) {
+          motores.direita();
+          motores.acionar(255, 255, 850);
+        }
+      }
+      erro = (leituraSensorLaser(sensorLaserPID) - target) * P;
+      motores.acionar(velocidadeAtual + erro, velocidadeAtual - erro);
     }
+    motores.tras();
+    motores.acionar(255, 255, 475);
+    motores.parado();
+    pegarBolinha();
+    (motores.*direcaoCurva)();
+    motores.acionar(255, 255, 850);
+    motores.frente();
+    motores.acionar(255, 255, 900);
+    (motores.*direcaoCurva)();
+    motores.acionar(255, 255, 420);
+    motores.parado();
+    curvas++;
   }
 }
 
 void pegarBolinhasLaterais(void (ControleMotores::*direcaoCurva)()) {
   motores.parado();
   motores.tras();
-  motores.acionar(255, 255, 90);
+  motores.acionar(255, 255, 200);
   (motores.*direcaoCurva)();
-  motores.acionar(255, 255, 575);
+  motores.acionar(255, 255, 1);
+  long tempoGiro = millis();
+  while (leituraSharp(sensorSharpGarra) >= 9 || millis() - tempoGiro >= 1300);
+  long tempoParada = millis();
   motores.parado();
-  delay(2000);
+  motores.frente();
+  motores.acionar(255, 255, 450);
+  motores.parado();
+  pegarBolinha();
+  motores.tras();
+  motores.acionar(255, 255, 450);
+  motores.parado();
   if (direcaoCurva == &ControleMotores::esquerda) {
     motores.direita();
   } else {
     motores.esquerda();
   }
-  motores.acionar(255, 255, 585);
+  motores.acionar(255, 255, tempoParada - tempoGiro);
+  motores.parado();
 }
 void loop() {
   //--------------------------VALENDO--------------------------
@@ -502,10 +639,10 @@ void loop() {
   //   }
   // }
   //--------------------------VALENDO--------------------------
-  // resgate();
+  resgate();
   // // debugVeml6040();
   // // debugSensoresLinha();
-  debugSensoresLaser();
+  // debugSensoresLaser();
   // debugSensoresSharp();
   // pegarBolinha();
 }
